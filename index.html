@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador ZPL · CD Oquendo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#14181d; --panel:#1d232b; --panel2:#232b35; --line:#2e3844;
+  --txt:#e8ecf1; --txt2:#8d99a6; --acc:#2f7de1; --acc2:#5ea0f2;
+  --ok:#3fb96b; --warn:#e2a63d; --paper:#fbfbf8; --liner:#c9cdd2;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --cond:'Barlow Condensed',sans-serif; --body:'Barlow',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--body);font-size:15px;min-height:100vh}
+header{border-bottom:1px solid var(--line);padding:18px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-family:var(--cond);font-weight:700;font-size:26px;letter-spacing:.04em;text-transform:uppercase}
+header h1 span{color:var(--acc2)}
+header .sub{color:var(--txt2);font-size:13px;font-family:var(--mono)}
+.wrap{display:grid;grid-template-columns:minmax(340px,520px) 1fr;gap:26px;padding:26px 28px;max-width:1280px;margin:0 auto}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+/* ---- panel izquierdo ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:18px}
+.card h2{font-family:var(--cond);font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--txt2);margin-bottom:14px}
+.tabs{display:flex;gap:8px;margin-bottom:18px}
+.tab{flex:1;padding:11px 0;text-align:center;font-family:var(--cond);font-weight:600;font-size:17px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--txt2);cursor:pointer;transition:.15s}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.fld{flex:1;min-width:110px}
+label{display:block;font-size:12px;color:var(--txt2);margin-bottom:5px;letter-spacing:.03em}
+input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);padding:9px 11px;font-family:var(--mono);font-size:14px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-offset:0;border-color:var(--acc)}
+textarea{resize:vertical;min-height:96px}
+.src{display:flex;gap:8px;margin-bottom:14px}
+.src button{flex:1;padding:8px;font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt2);cursor:pointer;font-family:var(--body)}
+.src button.on{color:var(--txt);border-color:var(--acc);background:#243247}
+.hint{font-size:12.5px;color:var(--txt2);margin-top:6px;line-height:1.45}
+.file-drop{border:1.5px dashed var(--line);border-radius:8px;padding:20px;text-align:center;color:var(--txt2);cursor:pointer;font-size:13.5px;transition:.15s}
+.file-drop:hover{border-color:var(--acc);color:var(--txt)}
+.hide{display:none!important}
+/* ---- panel derecho ---- */
+.printer-slot{height:14px;background:linear-gradient(#0a0d10,#1a2027);border-radius:7px;margin:0 8% 0;box-shadow:inset 0 2px 6px #000}
+.liner{background:var(--liner);padding:16px 14px 20px;border-radius:0 0 10px 10px;margin:0 4%;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.label-preview{background:var(--paper);border-radius:8px;color:#111;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.25);margin:0 auto}
+.lp-inner{position:absolute;inset:0}
+.lp-bc{position:absolute;left:50%;transform:translateX(-50%)}
+.lp-code{position:absolute;width:100%;text-align:center;font-weight:800;font-family:'Arial Narrow',var(--cond);color:#0a0a0a;white-space:nowrap;letter-spacing:.01em;line-height:1}
+.lp-line{position:absolute;width:100%;background:#0a0a0a}
+.lp-brand{position:absolute;font-weight:800;color:#0a0a0a;font-family:var(--body)}
+.lp-meta{position:absolute;right:2%;font-weight:800;color:#0a0a0a;font-family:var(--body);text-align:right;white-space:nowrap}
+.dims{font-family:var(--mono);font-size:12px;color:var(--txt2);text-align:center;margin-top:10px}
+/* ---- resumen + botones ---- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:16px 0}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-family:var(--mono);font-size:17px;color:var(--acc2)}
+.stat span{font-size:11.5px;color:var(--txt2);letter-spacing:.04em;text-transform:uppercase}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.btn{flex:1;min-width:150px;padding:13px 16px;border:none;border-radius:8px;font-family:var(--cond);font-weight:600;font-size:16px;letter-spacing:.07em;text-transform:uppercase;cursor:pointer;transition:.15s}
+.btn.sample{background:var(--panel2);color:var(--txt);border:1px solid var(--acc)}
+.btn.sample:hover{background:#243247}
+.btn.full{background:var(--acc);color:#fff}
+.btn.full:hover{background:var(--acc2)}
+.btn.zip{background:var(--panel2);color:var(--txt2);border:1px solid var(--line)}
+.btn.zip:hover{color:var(--txt);border-color:var(--txt2)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.msg{font-family:var(--mono);font-size:12.5px;margin-top:12px;padding:10px 12px;border-radius:7px;display:none}
+.msg.ok{display:block;background:#16311f;color:#7fd8a0;border:1px solid #2b5c3c}
+.msg.err{display:block;background:#3a1d1d;color:#f0a0a0;border:1px solid #6b3232}
+details{margin-top:16px;border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+summary{cursor:pointer;font-family:var(--cond);letter-spacing:.1em;text-transform:uppercase;font-size:13.5px;color:var(--txt2)}
+details ol{margin:10px 0 4px 20px;color:var(--txt2);font-size:13.5px;line-height:1.7}
+details code{font-family:var(--mono);color:var(--acc2);font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Generador <span>ZPL</span></h1>
+  <div class="sub">Etiquetas Ubicación &amp; LPN · Zebra ZT411 · CD Oquendo — Lavoro</div>
+</header>
+
+<div class="wrap">
+<!-- ================= CONFIG ================= -->
+<div>
+  <div class="tabs">
+    <div class="tab on" id="tabUbi" onclick="setMode('ubi')">Ubicaciones</div>
+    <div class="tab" id="tabLpn" onclick="setMode('lpn')">LPN</div>
+  </div>
+
+  <div class="card">
+    <h2>Etiqueta e impresora</h2>
+    <div class="row">
+      <div class="fld"><label>Ancho (mm)</label><input type="number" id="wmm" value="100" min="20" max="110"></div>
+      <div class="fld"><label>Alto (mm)</label><input type="number" id="hmm" value="60" min="20" max="300"></div>
+      <div class="fld"><label>Resolución</label>
+        <select id="dpi"><option value="203" selected>203 dpi</option><option value="300">300 dpi</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="fld"><label>Marca (texto inferior izquierdo)</label><input type="text" id="marca" value="Lavoro"></div>
+    </div>
+  </div>
+
+  <!-- ---- MODO UBICACIONES ---- -->
+  <div class="card" id="cardUbi">
+    <h2>Datos de ubicaciones</h2>
+    <div class="src">
+      <button class="on" id="srcFile" onclick="setSrc('file')">Archivo Excel / CSV</button>
+      <button id="srcPaste" onclick="setSrc('paste')">Pegar lista</button>
+      <button id="srcRange" onclick="setSrc('range')">Generar rango</button>
+    </div>
+
+    <div id="boxFile">
+      <div class="file-drop" onclick="document.getElementById('fileInput').click()">
+        Haz clic para elegir un archivo <b>.xlsx</b> o <b>.csv</b><br>con la columna de ubicaciones
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hide">
+      <div class="row hide" id="rowSheet" style="margin-top:12px">
+        <div class="fld"><label>Hoja</label><select id="selSheet"></select></div>
+        <div class="fld"><label>Columna de ubicación</label><select id="selCol"></select></div>
+      </div>
+    </div>
+
+    <div id="boxPaste" class="hide">
+      <label>Una ubicación por línea</label>
+      <textarea id="pasteArea" placeholder="B02010101&#10;B02010102&#10;B02010103"></textarea>
+      <div class="hint">Se ignoran líneas vacías y espacios.</div>
+    </div>
+
+    <div id="boxRange" class="hide">
+      <div class="row">
+        <div class="fld"><label>Prefijo</label><input type="text" id="rgPrefix" value="B02"></div>
+        <div class="fld"><label>Rack desde</label><input type="number" id="rgR1" value="1" min="1"></div>
+        <div class="fld"><label>Rack hasta</label><input type="number" id="rgR2" value="24" min="1"></div>
+      </div>
+      <div class="row">
+        <div class="fld"><label>Columnas por rack</label><input type="number" id="rgC" value="49" min="1"></div>
+        <div class="fld"><label>Posiciones por columna</label><input type="number" id="rgP" value="8" min="1"></div>
+      </div>
+      <div class="hint">Genera PREFIJO + RR + CC + PP. Si tus racks tienen distinta cantidad de columnas, usa la opción de archivo.</div>
+    </div>
+  </div>
+
+  <!-- ---- MODO LPN ---- -->
+  <div class="card hide" id="cardLpn">
+    <h2>Serie de LPN</h2>
+    <div class="row">
+      <div class="fld"><label>Prefijo</label><input type="text" id="lpPrefix" value="LPN"></div>
+      <div class="fld"><label>Dígitos numéricos</label><input type="number" id="lpDigits" value="12" min="4" max="18"></div>
+    </div>
+    <div class="row">
+      <div class="fld"><label>Número inicial</label><input type="number" id="lpStart" value="150000" min="0"></div>
+      <div class="fld"><label>Cantidad</label><input type="number" id="lpQty" value="9756" min="1" max="200000"></div>
+    </div>
+    <div class="hint" id="lpHint"></div>
+  </div>
+
+</div>
+
+<!-- ================= PREVIEW + DESCARGAS ================= -->
+<div>
+  <div class="printer-slot"></div>
+  <div class="liner">
+    <div class="label-preview" id="lp">
+      <div class="lp-inner">
+        <svg class="lp-bc" id="lpBC"></svg>
+        <div class="lp-code" id="lpCode">B02010101</div>
+        <div class="lp-line" id="lpLine"></div>
+        <div class="lp-brand" id="lpBrand">Lavoro</div>
+        <div class="lp-meta" id="lpMeta">RACK: 01&nbsp;&nbsp;COL: 01&nbsp;&nbsp;POS: 01</div>
+      </div>
+    </div>
+  </div>
+  <div class="dims" id="dims"></div>
+
+  <div class="card" style="margin-top:20px">
+    <h2>Resumen del lote</h2>
+    <div class="stats">
+      <div class="stat"><b id="stTotal">0</b><span>Etiquetas</span></div>
+      <div class="stat"><b id="stFirst">—</b><span>Primera</span></div>
+      <div class="stat"><b id="stLast">—</b><span>Última</span></div>
+      <div class="stat"><b id="stTime">—</b><span>Impresión aprox.</span></div>
+    </div>
+    <div class="btns">
+      <button class="btn sample" id="btnSample" onclick="download('sample')">Muestra (5)</button>
+      <button class="btn full" id="btnFull" onclick="download('full')">Archivo completo</button>
+      <button class="btn zip" id="btnZip" onclick="download('zip')">ZIP por rack</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <details>
+      <summary>Cómo enviar a la ZT411</summary>
+      <ol>
+        <li>Abre <b>Zebra Setup Utilities</b> → selecciona la impresora → <b>Open Communication With Printer</b>.</li>
+        <li><b>File → Open</b> → elige el <code>.zpl</code> descargado (filtro "All files").</li>
+        <li>Clic en <b>Send To Printer</b>. Prueba siempre primero con la <b>Muestra (5)</b>.</li>
+        <li>Por red también sirve: <code>curl --data-binary @archivo.zpl http://IP_IMPRESORA:9100</code></li>
+        <li>Si la impresión queda desfasada, autocalibra: mantén <b>PAUSE + FEED</b> en el panel.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ================= ESTADO ================= */
+let mode = 'ubi';          // 'ubi' | 'lpn'
+let src  = 'file';         // fuente de datos en modo ubi
+let items = [];            // ubicaciones cargadas (modo ubi)
+let wb = null;             // workbook cargado
+
+const $ = id => document.getElementById(id);
+const UBI_RE = /^([A-Z]\d{2})(\d{2})(\d{2})(\d{2})$/;
+
+/* ================= MODO / FUENTE ================= */
+function setMode(m){
+  mode = m;
+  $('tabUbi').classList.toggle('on', m==='ubi');
+  $('tabLpn').classList.toggle('on', m==='lpn');
+  $('cardUbi').classList.toggle('hide', m!=='ubi');
+  $('cardLpn').classList.toggle('hide', m!=='lpn');
+  refresh();
+}
+function setSrc(s){
+  src = s;
+  ['File','Paste','Range'].forEach(k=>{
+    $('src'+k).classList.toggle('on', k.toLowerCase()===s);
+    $('box'+k).classList.toggle('hide', k.toLowerCase()!==s);
+  });
+  rebuildItems();
+}
+
+/* ================= CARGA DE DATOS (UBI) ================= */
+$('fileInput').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      wb = XLSX.read(ev.target.result, {type:'array'});
+      const sel = $('selSheet'); sel.innerHTML='';
+      wb.SheetNames.forEach(n=>{ const o=document.createElement('option'); o.value=o.textContent=n; sel.appendChild(o); });
+      $('rowSheet').classList.remove('hide');
+      loadSheetCols();
+    }catch(err){ showMsg('No se pudo leer el archivo: '+err.message, true); }
+  };
+  reader.readAsArrayBuffer(f);
+});
+$('selSheet').addEventListener('change', loadSheetCols);
+$('selCol').addEventListener('change', rebuildItems);
+$('pasteArea').addEventListener('input', rebuildItems);
+['rgPrefix','rgR1','rgR2','rgC','rgP'].forEach(id=>$(id).addEventListener('input', rebuildItems));
+['lpPrefix','lpDigits','lpStart','lpQty'].forEach(id=>$(id).addEventListener('input', refresh));
+['wmm','hmm','dpi','marca'].forEach(id=>$(id).addEventListener('input', refresh));
+
+function loadSheetCols(){
+  if(!wb) return;
+  const ws = wb.Sheets[$('selSheet').value];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  if(!rows.length) return;
+  const headers = rows[0].map((h,i)=> (h!==''? String(h) : 'Columna '+(i+1)));
+  const sel = $('selCol'); sel.innerHTML='';
+  headers.forEach((h,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=h; sel.appendChild(o); });
+  // autoselecciona la columna que parezca contener ubicaciones
+  for(let i=0;i<headers.length;i++){
+    const v = rows[1] ? String(rows[1][i]||'') : '';
+    if(UBI_RE.test(v.trim())){ sel.value = i; break; }
+  }
+  rebuildItems();
+}
+
+function rebuildItems(){
+  items = [];
+  if(mode!=='ubi'){ refresh(); return; }
+  if(src==='file' && wb){
+    const ws = wb.Sheets[$('selSheet').value];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    const c = parseInt($('selCol').value||0);
+    for(let r=1;r<rows.length;r++){
+      const v = String(rows[r][c]||'').trim();
+      if(v) items.push(v);
+    }
+  } else if(src==='paste'){
+    items = $('pasteArea').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  } else if(src==='range'){
+    const p=$('rgPrefix').value.trim(), r1=+$('rgR1').value, r2=+$('rgR2').value, C=+$('rgC').value, P=+$('rgP').value;
+    if(p && r1>=1 && r2>=r1 && C>=1 && P>=1 && (r2-r1+1)*C*P<=200000){
+      for(let r=r1;r<=r2;r++)for(let c=1;c<=C;c++)for(let q=1;q<=P;q++)
+        items.push(p + String(r).padStart(2,'0') + String(c).padStart(2,'0') + String(q).padStart(2,'0'));
+    }
+  }
+  refresh();
+}
+
+/* ================= LISTA ACTIVA ================= */
+function getList(){
+  if(mode==='ubi') return items;
+  // LPN: se genera al vuelo
+  const p=$('lpPrefix').value.trim(), d=+$('lpDigits').value, s=+$('lpStart').value, q=Math.min(+$('lpQty').value, 200000);
+  if(!p && d<1 || q<1 || isNaN(s)) return [];
+  const out = new Array(q);
+  for(let i=0;i<q;i++) out[i] = p + String(s+i).padStart(d,'0');
+  return out;
+}
+function metaOf(code){
+  const m = UBI_RE.exec(code);
+  return m ? {rack:m[2], col:m[3], pos:m[4]} : null;
+}
+
+/* ================= ZPL ================= */
+function zplLabel(code, cfg){
+  const {PW, LL, marca} = cfg;
+  const meta = metaOf(code);
+  // barcode: ancho de modulo para ocupar ~66-70% del ancho
+  const modules = (code.length + 2) * 11 + 13;
+  const BY = Math.max(2, Math.min(6, Math.floor(PW * 0.68 / modules)));
+  const bcW = modules * BY;
+  const bcX = Math.max(0, Math.round((PW - bcW) / 2));
+  // proporciones (validadas en ZT411 @ 100x60mm)
+  const bcY  = Math.round(LL*0.021), bcH  = Math.round(LL*0.385);
+  const txtY = Math.round(LL*0.437), txtH = Math.round(LL*0.385);
+  const txtW = Math.floor(PW / (code.length + 0.7));
+  const lnY  = Math.round(LL*0.850);
+  const btY  = Math.round(LL*0.883), btH = Math.round(LL*0.104);
+  let z = '^XA\n^CI28\n^PW'+PW+'\n^LL'+LL+'\n^LH0,0\n';
+  z += '^FO'+bcX+','+bcY+'^BY'+BY+'^BCN,'+bcH+',N,N,N^FD'+code+'^FS\n';
+  z += '^FO0,'+txtY+'^A0N,'+txtH+','+txtW+'^FB'+PW+',1,0,C^FD'+code+'^FS\n';
+  z += '^FO0,'+lnY+'^GB'+PW+','+Math.max(3,Math.round(LL*0.008))+','+Math.max(3,Math.round(LL*0.008))+'^FS\n';
+  if(marca) z += '^FO15,'+btY+'^A0N,'+Math.round(btH*1.06)+','+Math.round(btH*1.06)+'^FD'+marca+'^FS\n';
+  if(meta){
+    const hdr = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
+    z += '^FO0,'+(btY+4)+'^A0N,'+btH+','+btH+'^FB'+(PW-17)+',1,0,R^FD'+hdr+'^FS\n';
+  }
+  z += '^PQ1\n^XZ\n';
+  return z;
+}
+function cfg(){
+  const dpmm = +$('dpi').value === 300 ? 11.81 : 7.99;
+  return {
+    PW: Math.round(+$('wmm').value * dpmm),
+    LL: Math.round(+$('hmm').value * dpmm),
+    marca: $('marca').value.trim()
+  };
+}
+
+/* ================= PREVIEW ================= */
+function refresh(){
+  const list = getList();
+  const code = list[0] || (mode==='ubi' ? 'B02010101' : 'LPN000000150000');
+  const c = cfg();
+  const W = Math.min(560, document.querySelector('.liner').clientWidth - 28);
+  const H = Math.round(W * (+$('hmm').value / +$('wmm').value));
+  const lp = $('lp'); lp.style.width=W+'px'; lp.style.height=H+'px';
+  const f = W / c.PW; // factor dots->px
+
+  const modules = (code.length+2)*11+13;
+  const BY = Math.max(2, Math.min(6, Math.floor(c.PW*0.68/modules)));
+  try{
+    JsBarcode('#lpBC', code, {format:'CODE128', displayValue:false, margin:0,
+      width: Math.max(1, BY*f), height: Math.round(c.LL*0.385*f)});
+  }catch(e){}
+  const bc = $('lpBC');
+  bc.style.top = Math.round(c.LL*0.021*f)+'px';
+
+  const codeEl = $('lpCode');
+  codeEl.textContent = code;
+  codeEl.style.top = Math.round(c.LL*0.437*f)+'px';
+  codeEl.style.fontSize = Math.round(c.LL*0.385*f*0.94)+'px';
+
+  const ln = $('lpLine');
+  ln.style.top = Math.round(c.LL*0.850*f)+'px';
+  ln.style.height = Math.max(2, Math.round(c.LL*0.008*f))+'px';
+
+  const bt = Math.round(c.LL*0.104*f);
+  const brand = $('lpBrand');
+  brand.textContent = c.marca; brand.style.display = c.marca?'block':'none';
+  brand.style.top = Math.round(c.LL*0.883*f)+'px';
+  brand.style.left = Math.round(15*f)+'px';
+  brand.style.fontSize = Math.round(bt*0.95)+'px';
+
+  const meta = metaOf(code);
+  const metaEl = $('lpMeta');
+  if(meta){
+    metaEl.style.display='block';
+    metaEl.textContent = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
+    metaEl.style.top = (Math.round(c.LL*0.883*f)+2)+'px';
+    metaEl.style.fontSize = Math.round(bt*0.86)+'px';
+  } else metaEl.style.display='none';
+
+  $('dims').textContent = $('wmm').value+' × '+$('hmm').value+' mm · '+$('dpi').value+' dpi · '+c.PW+' × '+c.LL+' dots';
+
+  // resumen
+  const n = list.length;
+  $('stTotal').textContent = n.toLocaleString('es-PE');
+  $('stFirst').textContent = n? list[0] : '—';
+  $('stLast').textContent  = n? list[n-1] : '—';
+  const min = n * (+$('hmm').value) / 152 / 60; // 6 ips ≈ 152 mm/s
+  $('stTime').textContent = n? (min<1? '<1 min' : Math.round(min)+' min') : '—';
+  const hasRacks = mode==='ubi' && n>0 && metaOf(list[0]);
+  $('btnZip').disabled = !hasRacks;
+  $('btnSample').disabled = $('btnFull').disabled = !n;
+
+  if(mode==='lpn'){
+    const p=$('lpPrefix').value.trim(), d=+$('lpDigits').value, s=+$('lpStart').value, q=+$('lpQty').value;
+    $('lpHint').textContent = q>0 ? 'Serie: '+p+String(s).padStart(d,'0')+'  →  '+p+String(s+q-1).padStart(d,'0') : '';
+  }
+}
+window.addEventListener('resize', refresh);
+
+/* ================= DESCARGAS ================= */
+function saveBlob(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();}, 500);
+}
+function showMsg(t, err){
+  const m = $('msg'); m.textContent = t;
+  m.className = 'msg ' + (err?'err':'ok');
+}
+async function download(kind){
+  const list = getList();
+  if(!list.length){ showMsg('No hay datos cargados.', true); return; }
+  const c = cfg();
+  const stem = mode==='ubi' ? 'Etiquetas_Ubicaciones' : 'Etiquetas_LPN';
+  try{
+    if(kind==='sample'){
+      const z = list.slice(0,5).map(x=>zplLabel(x,c)).join('');
+      saveBlob(new Blob([z],{type:'text/plain'}), stem+'_MUESTRA_5.zpl');
+      showMsg('Muestra de 5 etiquetas descargada. Pruébala antes del lote completo.');
+    } else if(kind==='full'){
+      const parts = [];
+      for(let i=0;i<list.length;i++) parts.push(zplLabel(list[i],c));
+      saveBlob(new Blob(parts,{type:'text/plain'}), stem+'_COMPLETO_'+list.length+'.zpl');
+      showMsg('Archivo completo descargado: '+list.length.toLocaleString('es-PE')+' etiquetas.');
+    } else if(kind==='zip'){
+      const zip = new JSZip();
+      const byRack = {};
+      list.forEach(x=>{ const m=metaOf(x); const k=m? 'RACK_'+m.rack : 'OTROS';
+        (byRack[k]=byRack[k]||[]).push(x); });
+      Object.keys(byRack).sort().forEach(k=>{
+        zip.file(k+'_'+byRack[k].length+'_etiquetas.zpl', byRack[k].map(x=>zplLabel(x,c)).join(''));
+      });
+      const blob = await zip.generateAsync({type:'blob'});
+      saveBlob(blob, stem+'_por_rack.zip');
+      showMsg('ZIP generado: un archivo .zpl por rack.');
+    }
+  }catch(err){ showMsg('Error al generar: '+err.message, true); }
+}
+
+/* init */
+setSrc('file');
+refresh();
+</script>
+</body>
+</html>
