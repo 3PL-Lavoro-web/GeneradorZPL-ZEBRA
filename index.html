@@ -312,40 +312,46 @@ function metaOf(code){
   return m ? {rack:m[2], col:m[3], pos:m[4]} : null;
 }
 
-/* ================= ZPL ================= */
-function zplLabel(code, cfg){
-  const {PW, LL, marca} = cfg;
+/* ================= ZPL (plantilla V4 validada en la ZT411) ================= */
+/* Base exacta del archivo Etiquetas_LAVORO_V4 a 100x60mm @203dpi.
+   Con los valores por defecto la salida es IDENTICA byte a byte al V4. */
+const BASE = {PW:812, LL:500, bcY:10, bcH:185, bcBY:4, txtY:210, txtH:185, txtW:84,
+              lnY:408, lnT:4, brX:15, brY:424, brF:50, hdY:428, hdF:46, hdW:795};
+function cfg(){
+  const k = +$('dpi').value === 300 ? 300/203 : 1;
+  const sx = (+$('wmm').value / 100) * k;
+  const sy = (+$('hmm').value / 60) * k;
+  return { sx, sy, PW: Math.round(BASE.PW*sx), LL: Math.round(BASE.LL*sy),
+           marca: $('marca').value.trim() };
+}
+function layout(code, c){
+  const {sx, sy, PW, LL} = c;
+  const modules = (code.length + 2) * 11 + 13;   // Code 128
+  let BY = Math.round(BASE.bcBY * sx * (134 / modules));
+  BY = Math.max(2, Math.min(6, BY));
+  const bcX = Math.max(0, Math.round((PW - modules*BY) / 2));
+  return { PW, LL, BY, bcX,
+    bcY: Math.round(BASE.bcY*sy),  bcH: Math.round(BASE.bcH*sy),
+    txtY: Math.round(BASE.txtY*sy), txtH: Math.round(BASE.txtH*sy),
+    txtW: code.length === 9 ? Math.round(BASE.txtW*sx) : Math.floor(PW/(code.length+0.7)),
+    lnY: Math.round(BASE.lnY*sy),  lnT: Math.max(3, Math.round(BASE.lnT*sy)),
+    brX: Math.round(BASE.brX*sx),  brY: Math.round(BASE.brY*sy), brF: Math.round(BASE.brF*sy),
+    hdY: Math.round(BASE.hdY*sy),  hdF: Math.round(BASE.hdF*sy), hdW: Math.round(BASE.hdW*sx) };
+}
+function zplLabel(code, c){
+  const L = layout(code, c);
   const meta = metaOf(code);
-  // barcode: ancho de modulo para ocupar ~66-70% del ancho
-  const modules = (code.length + 2) * 11 + 13;
-  const BY = Math.max(2, Math.min(6, Math.floor(PW * 0.68 / modules)));
-  const bcW = modules * BY;
-  const bcX = Math.max(0, Math.round((PW - bcW) / 2));
-  // proporciones (validadas en ZT411 @ 100x60mm)
-  const bcY  = Math.round(LL*0.021), bcH  = Math.round(LL*0.385);
-  const txtY = Math.round(LL*0.437), txtH = Math.round(LL*0.385);
-  const txtW = Math.floor(PW / (code.length + 0.7));
-  const lnY  = Math.round(LL*0.850);
-  const btY  = Math.round(LL*0.883), btH = Math.round(LL*0.104);
-  let z = '^XA\n^CI28\n^PW'+PW+'\n^LL'+LL+'\n^LH0,0\n';
-  z += '^FO'+bcX+','+bcY+'^BY'+BY+'^BCN,'+bcH+',N,N,N^FD'+code+'^FS\n';
-  z += '^FO0,'+txtY+'^A0N,'+txtH+','+txtW+'^FB'+PW+',1,0,C^FD'+code+'^FS\n';
-  z += '^FO0,'+lnY+'^GB'+PW+','+Math.max(3,Math.round(LL*0.008))+','+Math.max(3,Math.round(LL*0.008))+'^FS\n';
-  if(marca) z += '^FO15,'+btY+'^A0N,'+Math.round(btH*1.06)+','+Math.round(btH*1.06)+'^FD'+marca+'^FS\n';
+  let z = '^XA\n^CI28\n^PW'+L.PW+'\n^LL'+L.LL+'\n^LH0,0\n';
+  z += '^FO'+L.bcX+','+L.bcY+'^BY'+L.BY+'^BCN,'+L.bcH+',N,N,N^FD'+code+'^FS\n';
+  z += '^FO0,'+L.txtY+'^A0N,'+L.txtH+','+L.txtW+'^FB'+L.PW+',1,0,C^FD'+code+'^FS\n';
+  z += '^FO0,'+L.lnY+'^GB'+L.PW+','+L.lnT+','+L.lnT+'^FS\n';
+  if(c.marca) z += '^FO'+L.brX+','+L.brY+'^A0N,'+L.brF+','+L.brF+'^FD'+c.marca+'^FS\n';
   if(meta){
     const hdr = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
-    z += '^FO0,'+(btY+4)+'^A0N,'+btH+','+btH+'^FB'+(PW-17)+',1,0,R^FD'+hdr+'^FS\n';
+    z += '^FO0,'+L.hdY+'^A0N,'+L.hdF+','+L.hdF+'^FB'+L.hdW+',1,0,R^FD'+hdr+'^FS\n';
   }
   z += '^PQ1\n^XZ\n';
   return z;
-}
-function cfg(){
-  const dpmm = +$('dpi').value === 300 ? 11.81 : 7.99;
-  return {
-    PW: Math.round(+$('wmm').value * dpmm),
-    LL: Math.round(+$('hmm').value * dpmm),
-    marca: $('marca').value.trim()
-  };
 }
 
 /* ================= PREVIEW ================= */
@@ -353,46 +359,43 @@ function refresh(){
   const list = getList();
   const code = list[0] || (mode==='ubi' ? 'B02010101' : 'LPN000000150000');
   const c = cfg();
+  const L = layout(code, c);
   const W = Math.min(560, document.querySelector('.liner').clientWidth - 28);
-  const H = Math.round(W * (+$('hmm').value / +$('wmm').value));
+  const H = Math.round(W * (L.LL / L.PW));
   const lp = $('lp'); lp.style.width=W+'px'; lp.style.height=H+'px';
-  const f = W / c.PW; // factor dots->px
+  const f = W / L.PW; // factor dots->px
 
-  const modules = (code.length+2)*11+13;
-  const BY = Math.max(2, Math.min(6, Math.floor(c.PW*0.68/modules)));
   try{
     JsBarcode('#lpBC', code, {format:'CODE128', displayValue:false, margin:0,
-      width: Math.max(1, BY*f), height: Math.round(c.LL*0.385*f)});
+      width: Math.max(1, L.BY*f), height: Math.round(L.bcH*f)});
   }catch(e){}
-  const bc = $('lpBC');
-  bc.style.top = Math.round(c.LL*0.021*f)+'px';
+  $('lpBC').style.top = Math.round(L.bcY*f)+'px';
 
   const codeEl = $('lpCode');
   codeEl.textContent = code;
-  codeEl.style.top = Math.round(c.LL*0.437*f)+'px';
-  codeEl.style.fontSize = Math.round(c.LL*0.385*f*0.94)+'px';
+  codeEl.style.top = Math.round(L.txtY*f)+'px';
+  codeEl.style.fontSize = Math.round(L.txtH*f*0.94)+'px';
 
   const ln = $('lpLine');
-  ln.style.top = Math.round(c.LL*0.850*f)+'px';
-  ln.style.height = Math.max(2, Math.round(c.LL*0.008*f))+'px';
+  ln.style.top = Math.round(L.lnY*f)+'px';
+  ln.style.height = Math.max(2, Math.round(L.lnT*f))+'px';
 
-  const bt = Math.round(c.LL*0.104*f);
   const brand = $('lpBrand');
   brand.textContent = c.marca; brand.style.display = c.marca?'block':'none';
-  brand.style.top = Math.round(c.LL*0.883*f)+'px';
-  brand.style.left = Math.round(15*f)+'px';
-  brand.style.fontSize = Math.round(bt*0.95)+'px';
+  brand.style.top = Math.round(L.brY*f)+'px';
+  brand.style.left = Math.round(L.brX*f)+'px';
+  brand.style.fontSize = Math.round(L.brF*f*0.92)+'px';
 
   const meta = metaOf(code);
   const metaEl = $('lpMeta');
   if(meta){
     metaEl.style.display='block';
     metaEl.textContent = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
-    metaEl.style.top = (Math.round(c.LL*0.883*f)+2)+'px';
-    metaEl.style.fontSize = Math.round(bt*0.86)+'px';
+    metaEl.style.top = Math.round(L.hdY*f)+'px';
+    metaEl.style.fontSize = Math.round(L.hdF*f*0.88)+'px';
   } else metaEl.style.display='none';
 
-  $('dims').textContent = $('wmm').value+' × '+$('hmm').value+' mm · '+$('dpi').value+' dpi · '+c.PW+' × '+c.LL+' dots';
+  $('dims').textContent = $('wmm').value+' × '+$('hmm').value+' mm · '+$('dpi').value+' dpi · '+L.PW+' × '+L.LL+' dots';
 
   // resumen
   const n = list.length;
