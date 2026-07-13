@@ -49,11 +49,13 @@ textarea{resize:vertical;min-height:96px}
 .liner{background:var(--liner);padding:16px 14px 20px;border-radius:0 0 10px 10px;margin:0 4%;box-shadow:0 12px 30px rgba(0,0,0,.45)}
 .label-preview{background:var(--paper);border-radius:8px;color:#111;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.25);margin:0 auto}
 .lp-inner{position:absolute;inset:0}
-.lp-bc{position:absolute;left:50%;transform:translateX(-50%)}
+.lp-bc{position:absolute}
 .lp-code{position:absolute;width:100%;text-align:center;font-weight:800;font-family:'Arial Narrow',var(--cond);color:#0a0a0a;white-space:nowrap;letter-spacing:.01em;line-height:1}
+.lp-code span{display:inline-block;transform-origin:50% 50%}
 .lp-line{position:absolute;width:100%;background:#0a0a0a}
 .lp-brand{position:absolute;font-weight:800;color:#0a0a0a;font-family:var(--body)}
 .lp-meta{position:absolute;right:2%;font-weight:800;color:#0a0a0a;font-family:var(--body);text-align:right;white-space:nowrap}
+.lp-title{position:absolute;width:100%;text-align:center;font-weight:800;color:#0a0a0a;font-family:var(--body);white-space:nowrap;display:none}
 .dims{font-family:var(--mono);font-size:12px;color:var(--txt2);text-align:center;margin-top:10px}
 /* ---- resumen + botones ---- */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:16px 0}
@@ -154,6 +156,9 @@ details code{font-family:var(--mono);color:var(--acc2);font-size:12.5px}
       <div class="fld"><label>Dígitos numéricos</label><input type="number" id="lpDigits" value="12" min="4" max="18"></div>
     </div>
     <div class="row">
+      <div class="fld"><label>Título de cabecera</label><input type="text" id="lpTitle" value="INVENTARIO 2026"></div>
+    </div>
+    <div class="row">
       <div class="fld"><label>Número inicial</label><input type="number" id="lpStart" value="150000" min="0"></div>
       <div class="fld"><label>Cantidad</label><input type="number" id="lpQty" value="9756" min="1" max="200000"></div>
     </div>
@@ -169,7 +174,8 @@ details code{font-family:var(--mono);color:var(--acc2);font-size:12.5px}
     <div class="label-preview" id="lp">
       <div class="lp-inner">
         <svg class="lp-bc" id="lpBC"></svg>
-        <div class="lp-code" id="lpCode">B02010101</div>
+        <div class="lp-title" id="lpTitlePv">INVENTARIO 2026</div>
+        <div class="lp-code" id="lpCode"><span id="lpCodeTxt">B02010101</span></div>
         <div class="lp-line" id="lpLine"></div>
         <div class="lp-brand" id="lpBrand">Lavoro</div>
         <div class="lp-meta" id="lpMeta">RACK: 01&nbsp;&nbsp;COL: 01&nbsp;&nbsp;POS: 01</div>
@@ -255,7 +261,7 @@ $('selSheet').addEventListener('change', loadSheetCols);
 $('selCol').addEventListener('change', rebuildItems);
 $('pasteArea').addEventListener('input', rebuildItems);
 ['rgPrefix','rgR1','rgR2','rgC','rgP'].forEach(id=>$(id).addEventListener('input', rebuildItems));
-['lpPrefix','lpDigits','lpStart','lpQty'].forEach(id=>$(id).addEventListener('input', refresh));
+['lpPrefix','lpDigits','lpStart','lpQty','lpTitle'].forEach(id=>$(id).addEventListener('input', refresh));
 ['wmm','hmm','dpi','marca'].forEach(id=>$(id).addEventListener('input', refresh));
 
 function loadSheetCols(){
@@ -322,7 +328,8 @@ function cfg(){
   const sx = (+$('wmm').value / 100) * k;
   const sy = (+$('hmm').value / 60) * k;
   return { sx, sy, PW: Math.round(BASE.PW*sx), LL: Math.round(BASE.LL*sy),
-           marca: $('marca').value.trim() };
+           marca: $('marca').value.trim(), tpl: mode,
+           titulo: $('lpTitle').value.trim() };
 }
 function layout(code, c){
   const {sx, sy, PW, LL} = c;
@@ -338,7 +345,35 @@ function layout(code, c){
     brX: Math.round(BASE.brX*sx),  brY: Math.round(BASE.brY*sy), brF: Math.round(BASE.brF*sy),
     hdY: Math.round(BASE.hdY*sy),  hdF: Math.round(BASE.hdF*sy), hdW: Math.round(BASE.hdW*sx) };
 }
+/* Plantilla LPN: Lavoro + titulo arriba, linea gruesa, barcode ancho, LPN gigante abajo
+   (modelo INVENTARIO 2026 a 100x60mm @203dpi) */
+const BASE_LPN = {brX:15, brY:8, brF:48, tiY:10, tiF:46, lnY:60, lnT:6,
+                  bcY:76, bcH:225, txtY:315, txtH:170};
+function layoutLpn(code, c){
+  const {sx, sy, PW, LL} = c;
+  const modules = (code.length + 2) * 11 + 13;
+  const BY = Math.max(2, Math.min(6, Math.floor(PW * 0.76 / modules)));
+  const bcX = Math.max(0, Math.round((PW - modules*BY) / 2));
+  return { PW, LL, BY, bcX,
+    brX: Math.round(BASE_LPN.brX*sx), brY: Math.round(BASE_LPN.brY*sy), brF: Math.round(BASE_LPN.brF*sy),
+    tiY: Math.round(BASE_LPN.tiY*sy), tiF: Math.round(BASE_LPN.tiF*sy),
+    lnY: Math.round(BASE_LPN.lnY*sy), lnT: Math.max(4, Math.round(BASE_LPN.lnT*sy)),
+    bcY: Math.round(BASE_LPN.bcY*sy), bcH: Math.round(BASE_LPN.bcH*sy),
+    txtY: Math.round(BASE_LPN.txtY*sy), txtH: Math.round(BASE_LPN.txtH*sy),
+    txtW: Math.floor(PW/(code.length+0.9)) };
+}
 function zplLabel(code, c){
+  if(c.tpl === 'lpn'){
+    const L = layoutLpn(code, c);
+    let z = '^XA\n^CI28\n^PW'+L.PW+'\n^LL'+L.LL+'\n^LH0,0\n';
+    if(c.marca)  z += '^FO'+L.brX+','+L.brY+'^A0N,'+L.brF+','+L.brF+'^FD'+c.marca+'^FS\n';
+    if(c.titulo) z += '^FO0,'+L.tiY+'^A0N,'+L.tiF+','+L.tiF+'^FB'+L.PW+',1,0,C^FD'+c.titulo+'^FS\n';
+    z += '^FO0,'+L.lnY+'^GB'+L.PW+','+L.lnT+','+L.lnT+'^FS\n';
+    z += '^FO'+L.bcX+','+L.bcY+'^BY'+L.BY+'^BCN,'+L.bcH+',N,N,N^FD'+code+'^FS\n';
+    z += '^FO0,'+L.txtY+'^A0N,'+L.txtH+','+L.txtW+'^FB'+L.PW+',1,0,C^FD'+code+'^FS\n';
+    z += '^PQ1\n^XZ\n';
+    return z;
+  }
   const L = layout(code, c);
   const meta = metaOf(code);
   let z = '^XA\n^CI28\n^PW'+L.PW+'\n^LL'+L.LL+'\n^LH0,0\n';
@@ -359,7 +394,8 @@ function refresh(){
   const list = getList();
   const code = list[0] || (mode==='ubi' ? 'B02010101' : 'LPN000000150000');
   const c = cfg();
-  const L = layout(code, c);
+  const isLpn = c.tpl === 'lpn';
+  const L = isLpn ? layoutLpn(code, c) : layout(code, c);
   const W = Math.min(560, document.querySelector('.liner').clientWidth - 28);
   const H = Math.round(W * (L.LL / L.PW));
   const lp = $('lp'); lp.style.width=W+'px'; lp.style.height=H+'px';
@@ -369,12 +405,21 @@ function refresh(){
     JsBarcode('#lpBC', code, {format:'CODE128', displayValue:false, margin:0,
       width: Math.max(1, L.BY*f), height: Math.round(L.bcH*f)});
   }catch(e){}
-  $('lpBC').style.top = Math.round(L.bcY*f)+'px';
+  const bcEl = $('lpBC');
+  bcEl.style.top = Math.round(L.bcY*f)+'px';
+  // centrado por ancho real renderizado (equivalente al calculo del ZPL)
+  const bw = bcEl.getBoundingClientRect().width || 0;
+  bcEl.style.left = Math.max(0, Math.round((W - bw)/2))+'px';
 
-  const codeEl = $('lpCode');
-  codeEl.textContent = code;
+  const codeEl = $('lpCode'), codeTxt = $('lpCodeTxt');
+  codeTxt.style.transform = 'none';
+  codeTxt.textContent = code;
   codeEl.style.top = Math.round(L.txtY*f)+'px';
   codeEl.style.fontSize = Math.round(L.txtH*f*0.94)+'px';
+  // compresion horizontal fiel a la fuente condensada A0 del ZPL
+  const tw = codeTxt.getBoundingClientRect().width || 1;
+  const k = Math.min(1, (W*0.985)/tw);
+  codeTxt.style.transform = 'scaleX('+k.toFixed(3)+')';
 
   const ln = $('lpLine');
   ln.style.top = Math.round(L.lnY*f)+'px';
@@ -386,11 +431,19 @@ function refresh(){
   brand.style.left = Math.round(L.brX*f)+'px';
   brand.style.fontSize = Math.round(L.brF*f*0.92)+'px';
 
-  const meta = metaOf(code);
+  const title = $('lpTitlePv');
+  if(isLpn && c.titulo){
+    title.style.display='block';
+    title.textContent = c.titulo;
+    title.style.top = Math.round(L.tiY*f)+'px';
+    title.style.fontSize = Math.round(L.tiF*f*0.9)+'px';
+  } else title.style.display='none';
+
+  const meta = isLpn ? null : metaOf(code);
   const metaEl = $('lpMeta');
   if(meta){
     metaEl.style.display='block';
-    metaEl.textContent = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
+    metaEl.textContent = 'RACK: '+meta.rack+'\u00a0\u00a0COL: '+meta.col+'\u00a0\u00a0POS: '+meta.pos;
     metaEl.style.top = Math.round(L.hdY*f)+'px';
     metaEl.style.fontSize = Math.round(L.hdF*f*0.88)+'px';
   } else metaEl.style.display='none';
