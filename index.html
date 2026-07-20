@@ -222,7 +222,8 @@ let items = [];            // ubicaciones cargadas (modo ubi)
 let wb = null;             // workbook cargado
 
 const $ = id => document.getElementById(id);
-const UBI_RE = /^([A-Z]\d{2})(\d{2})(\d{2})(\d{2})$/;
+/* Prefijo de 3 caracteres (B02, TLD, ...) + RR + CC + POS/UBI de largo variable */
+const UBI_RE = /^([A-Z][A-Z0-9]{2})(\d{2})(\d{2})(\d+)$/;
 
 /* ================= MODO / FUENTE ================= */
 function setMode(m){
@@ -315,7 +316,8 @@ function getList(){
 }
 function metaOf(code){
   const m = UBI_RE.exec(code);
-  return m ? {rack:m[2], col:m[3], pos:m[4]} : null;
+  if(!m) return null;
+  return {rack:m[2], col:m[3], pos:m[4], lbl: m[4].length > 2 ? 'UBI' : 'POS'};
 }
 
 /* ================= ZPL (plantilla V4 validada en la ZT411) ================= */
@@ -382,7 +384,7 @@ function zplLabel(code, c){
   z += '^FO0,'+L.lnY+'^GB'+L.PW+','+L.lnT+','+L.lnT+'^FS\n';
   if(c.marca) z += '^FO'+L.brX+','+L.brY+'^A0N,'+L.brF+','+L.brF+'^FD'+c.marca+'^FS\n';
   if(meta){
-    const hdr = 'RACK: '+meta.rack+'  COL: '+meta.col+'  POS: '+meta.pos;
+    const hdr = 'RACK: '+meta.rack+'  COL: '+meta.col+'  '+meta.lbl+': '+meta.pos;
     z += '^FO0,'+L.hdY+'^A0N,'+L.hdF+','+L.hdF+'^FB'+L.hdW+',1,0,R^FD'+hdr+'^FS\n';
   }
   z += '^PQ1\n^XZ\n';
@@ -443,7 +445,7 @@ function refresh(){
   const metaEl = $('lpMeta');
   if(meta){
     metaEl.style.display='block';
-    metaEl.textContent = 'RACK: '+meta.rack+'\u00a0\u00a0COL: '+meta.col+'\u00a0\u00a0POS: '+meta.pos;
+    metaEl.textContent = 'RACK: '+meta.rack+'\u00a0\u00a0COL: '+meta.col+'\u00a0\u00a0'+meta.lbl+': '+meta.pos;
     metaEl.style.top = Math.round(L.hdY*f)+'px';
     metaEl.style.fontSize = Math.round(L.hdF*f*0.88)+'px';
   } else metaEl.style.display='none';
